@@ -4,7 +4,7 @@ Admin configuration for marketplace app
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Category, Service
+from .models import Category, Service, ProviderService
 
 
 @admin.register(Category)
@@ -99,3 +99,10 @@ class ServiceAdmin(admin.ModelAdmin):
         updated = queryset.update(is_featured=True)
         self.message_user(request, f'تم جعل {updated} خدمة مميزة.')
     make_featured.short_description = 'جعل الخدمات مميزة'
+
+@admin.register(ProviderService)
+class ProviderServiceAdmin(admin.ModelAdmin):
+    list_display=['provider','service','price','price_type','estimated_duration','is_active','created_at']
+    list_filter=['is_active','price_type','service__category','created_at']
+    search_fields=['provider__user__username','service__title','description']
+    raw_id_fields=['provider','service']

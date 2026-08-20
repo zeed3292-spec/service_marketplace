@@ -5,10 +5,13 @@ Django settings for service_marketplace project.
 
 from pathlib import Path
 from decouple import config
+import importlib.util
 
 # بناء المسارات داخل المشروع
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = config('SECRET_KEY', default='dev-insecure-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
@@ -20,8 +23,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 # Application definition
 
 INSTALLED_APPS = [
-    # Jazzmin - يجب أن يكون قبل django.contrib.admin
-    'jazzmin',
+    # Jazzmin added conditionally below when installed
 
     # Django core apps
     'django.contrib.admin',
@@ -41,7 +43,12 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.reviews',
     'apps.chat',
+    'apps.core',
+    'apps.payments',
 ]
+
+if importlib.util.find_spec('jazzmin'):
+    INSTALLED_APPS.insert(0, 'jazzmin')
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -133,6 +140,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Media files (uploaded by users)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'private_media'
+MAX_PROVIDER_DOCUMENT_SIZE = 5 * 1024 * 1024
 
 
 # إعدادات Crispy Forms
@@ -295,3 +304,7 @@ JAZZMIN_UI_TWEAKS = {
     },
     'actions_sticky_top': True,
 }
+
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

@@ -196,3 +196,43 @@ MIT License
 **تم بناءه بـ ❤️ باستخدام Django**
 venv/Scripts/Activate.ps1
 python manage.py runserver
+
+## Marketplace Platform Update
+
+### Structure
+- `apps.accounts`: custom users, provider profiles, provider verification documents, registration/profile views.
+- `apps.marketplace`: categories, catalog services, provider service offerings, search and provider/service browsing.
+- `apps.orders`: order lifecycle, messages, delivery, cancellation/dispute-ready states.
+- `apps.payments`: payment records, commission snapshots, and gateway abstraction.
+- `apps.core`: terms versioning, terms acceptance, notifications, audit log, platform settings, shared commission calculation.
+
+### Environment variables
+Use `.env` (not committed) for `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL` if switching from SQLite, `PAYMENT_GATEWAY_KEY`, `MAPS_API_KEY`, and email credentials. Jazzmin is loaded only when installed so local checks are not blocked by missing optional admin theme packages.
+
+### Database and migrations
+Run:
+```bash
+python manage.py migrate
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test
+```
+
+### Admin
+Django Admin manages users, provider profiles, verification documents, document types, categories, services, provider services, orders, payments, commissions, terms, notifications, audit logs, and platform settings.
+
+### Payments
+Payment infrastructure is implemented with a `Payment` model, `CommissionRecord`, `calculate_commission()`, and a `ManualPaymentGateway` adapter for internal/manual flows and tests. **NEEDS EXTERNAL CONFIGURATION** for a production payment gateway.
+
+### Maps
+Provider profiles store city, district, latitude, longitude, and service radius. Map provider integration is intentionally abstract and **NEEDS EXTERNAL CONFIGURATION** for geocoding/map rendering credentials.
+
+### Documentation
+See `docs/ERD.md` for the implemented data model. Flow documentation was intentionally kept out of the repository to avoid extra generated artifacts.
+
+### Remaining Marketplace Completion
+- Map/location: provider profile editing uses Leaflet + OpenStreetMap tiles in development. Clicking or dragging the marker writes latitude/longitude into hidden form fields, then Django validates and saves them on `ProviderProfile`. Public provider profile pages render the saved marker without exposing documents.
+- Provider activation: providers must have `status=active` and `verification_status=verified` before creating `Service` or `ProviderService` records; the backend enforces this in views and model validation.
+- Provider documents: seeded document types include Identity, CV, experience/professional/academic certificates, commercial registration, and other. Uploaded documents use private storage and a protected download view.
+- Payments: customers create payment records from payment-pending orders. DEBUG-only test actions can mark success/failure; production electronic gateway integration still needs external credentials.
+- Search: navbar/global search and provider search use Django ORM over public providers, services, and categories, with provider filters for category, service, city, district, rating, experience, availability, and optional coordinate radius.

@@ -61,6 +61,11 @@
                 {% endif %}
             </ul>
 
+            
+            <form class="d-flex me-lg-3 my-2 my-lg-0" method="get" action="{% url 'marketplace:global_search' %}">
+                <input class="form-control form-control-sm" name="q" placeholder="🔍 ابحث عن خدمة أو مقدم..." value="{{ request.GET.q }}">
+            </form>
+
             <ul class="navbar-nav">
                 <!-- روابط المستخدم -->
                 {% if user.is_authenticated %}

@@ -11,6 +11,8 @@ urlpatterns = [
     # روابط الخدمة
     path('', views.ServiceListView.as_view(), name='service_list'),
     path('services/', views.ServiceListView.as_view(), name='services'),
+    path('search/', views.GlobalSearchView.as_view(), name='global_search'),
+    path('providers/', views.ProviderSearchView.as_view(), name='provider_search'),
     path('services/add/', views.ServiceCreateView.as_view(), name='service_create'),
     path('services/<int:pk>/', views.ServiceDetailView.as_view(), name='service_detail'),
     path('services/<int:pk>/edit/', views.ServiceUpdateView.as_view(), name='service_update'),

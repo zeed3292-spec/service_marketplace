@@ -6,7 +6,8 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from .models import User, ProviderProfile
+from django.conf import settings
+from .models import User, ProviderProfile, ProviderDocument
 
 
 # تعريف أداة التحقق من رقم الهاتف (أرقام فقط، ومتاح إشارة + اختياريًا)
@@ -185,8 +186,7 @@ class ProviderProfileForm(forms.ModelForm):
     """
     class Meta:
         model = ProviderProfile
-        fields = ['bio', 'profile_image', 'specialization', 'experience_years', 
-                  'hourly_rate', 'address', 'is_available']
+        fields = ['business_name','display_name','bio','phone','email','profile_image','specialization','experience_years','qualifications','experience','hourly_rate','address','city','district','latitude','longitude','service_radius','availability','is_available']
         widgets = {
             'bio': forms.Textarea(attrs={
                 'class': 'form-control',
@@ -213,6 +213,14 @@ class ProviderProfileForm(forms.ModelForm):
                 'rows': 2,
                 'placeholder': 'العنوان التفصيلي...'
             }),
+            'city': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'المدينة'}),
+            'district': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'الحي / المنطقة'}),
+            'latitude': forms.HiddenInput(),
+            'longitude': forms.HiddenInput(),
+            'service_radius': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'availability': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: السبت - الخميس 9ص إلى 5م'}),
+            'qualifications': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'experience': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'is_available': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
         labels = {
@@ -224,3 +232,20 @@ class ProviderProfileForm(forms.ModelForm):
             'address': 'العنوان',
             'is_available': 'متاح لطلبات جديدة',
         }
+class ProviderDocumentForm(forms.ModelForm):
+    class Meta:
+        model = ProviderDocument
+        fields = ['document_type','file']
+        widgets = {'document_type': forms.Select(attrs={'class':'form-select'}), 'file': forms.FileInput(attrs={'class':'form-control'})}
+    def clean_file(self):
+        f=self.cleaned_data['file']
+        allowed_ext={'.pdf','.jpg','.jpeg','.png','.doc','.docx'}
+        allowed_mimes={'application/pdf','image/jpeg','image/png','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+        import os
+        ext=os.path.splitext(f.name.lower())[1]
+        content_type=getattr(f, 'content_type', '')
+        if ext not in allowed_ext: raise ValidationError('نوع الملف غير مسموح.')
+        if content_type and content_type not in allowed_mimes: raise ValidationError('نوع MIME غير مسموح.')
+        if f.size > getattr(settings, 'MAX_PROVIDER_DOCUMENT_SIZE', 5*1024*1024): raise ValidationError('حجم الملف يتجاوز 5MB.')
+        if ext in {'.exe','.bat','.sh','.js'}: raise ValidationError('الملفات التنفيذية ممنوعة.')
+        return f

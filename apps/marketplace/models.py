@@ -19,6 +19,8 @@ class Category(models.Model):
         verbose_name='اسم التصنيف'
     )
     
+    slug = models.SlugField(max_length=120, unique=True, null=True, blank=True, verbose_name='الرابط المختصر')
+    image = models.ImageField(upload_to='categories/', null=True, blank=True, verbose_name='صورة التصنيف')
     description = models.TextField(
         blank=True,
         verbose_name='الوصف'
@@ -65,6 +67,7 @@ class Category(models.Model):
         verbose_name = 'تصنيف'
         verbose_name_plural = 'التصنيفات'
         ordering = ['order', 'name']
+        indexes = [models.Index(fields=['is_active','order']), models.Index(fields=['slug'])]
     
     def __str__(self):
         return self.name
@@ -228,6 +231,7 @@ class Service(models.Model):
         verbose_name = 'خدمة'
         verbose_name_plural = 'الخدمات'
         ordering = ['-created_at']
+        constraints = [models.CheckConstraint(check=models.Q(price__gte=0) | models.Q(price__isnull=True), name='service_price_non_negative')]
         indexes = [
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['category', 'status']),
@@ -266,6 +270,35 @@ class Service(models.Model):
         else:  # fixed
             return f'{self.price} {currency_text}' if self.price else 'قابل للتفاوض'
     
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if not self.provider_id:
+            return
+        profile = getattr(self.provider, 'provider_profile', None)
+        if profile and not (profile.status == 'active' and profile.verification_status == 'verified'):
+            raise ValidationError('يجب تفعيل/توثيق حساب مقدم الخدمة قبل إضافة الخدمات.')
+    
     def is_owned_by(self, user):
         """تحقق إذا كان المستخدم هو المالك"""
         return self.provider == user
+
+class ProviderService(models.Model):
+    PRICE_TYPE_CHOICES = Service.PRICE_TYPE_CHOICES
+    provider = models.ForeignKey('accounts.ProviderProfile', on_delete=models.CASCADE, related_name='provider_services')
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='provider_services')
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    price_type = models.CharField(max_length=20, choices=PRICE_TYPE_CHOICES, default='fixed')
+    estimated_duration = models.PositiveIntegerField(default=1, help_text='Days')
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        verbose_name='خدمة مقدم الخدمة'; verbose_name_plural='خدمات مقدمي الخدمات'
+        unique_together=[('provider','service')]
+        indexes=[models.Index(fields=['service','is_active']), models.Index(fields=['provider','is_active'])]
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if not (self.provider.status == 'active' and self.provider.verification_status == 'verified'):
+            raise ValidationError('يجب تفعيل/توثيق حساب مقدم الخدمة قبل إضافة الخدمات.')
+    def __str__(self): return f'{self.provider} - {self.service}'
