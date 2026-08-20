@@ -206,3 +206,33 @@ def role_required(allowed_roles):
             return view_func(request, *args, **kwargs)
         return wrapped_view
     return decorator
+
+@login_required
+def provider_documents_view(request):
+    if not request.user.is_provider():
+        messages.error(request, 'هذه الصفحة لمقدمي الخدمات فقط.')
+        return redirect('home')
+    from .forms import ProviderDocumentForm
+    from .models import ProviderDocument
+    profile = services.get_provider_profile(request.user)
+    if request.method == 'POST':
+        form = ProviderDocumentForm(request.POST, request.FILES)
+        if form.is_valid():
+            doc = form.save(commit=False); doc.provider = profile; doc.save()
+            messages.success(request, 'تم رفع المستند وإرساله للمراجعة.')
+            return redirect('accounts:provider_documents')
+    else:
+        form = ProviderDocumentForm()
+    return render(request, 'accounts/provider_documents.html', {'form': form, 'documents': ProviderDocument.objects.filter(provider=profile).select_related('document_type')})
+
+@login_required
+def provider_submit_review(request):
+    if not request.user.is_provider():
+        messages.error(request, 'هذه الصفحة لمقدمي الخدمات فقط.'); return redirect('home')
+    profile = services.get_provider_profile(request.user)
+    if request.method == 'POST':
+        profile.verification_status = 'pending_review'; profile.status = 'inactive'; profile.save(update_fields=['verification_status','status','updated_at'])
+        from apps.core.services import notify
+        for admin in User.objects.filter(is_staff=True): notify(admin,'provider_submitted','طلب توثيق جديد',f'{request.user.username} أرسل حسابه للمراجعة')
+        messages.success(request, 'تم إرسال ملفك للمراجعة.')
+    return redirect('accounts:profile')

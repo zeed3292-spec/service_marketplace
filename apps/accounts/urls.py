@@ -8,6 +8,8 @@ from . import views
 app_name = 'accounts'
 
 urlpatterns = [
+    path("provider/documents/", views.provider_documents_view, name="provider_documents"),
+    path("provider/submit-review/", views.provider_submit_review, name="provider_submit_review"),
     # التسجيل وتسجيل الدخول
     path('register/', views.register_view, name='register'),
     path('login/', views.login_view, name='login'),

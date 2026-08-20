@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<div class="container py-4"><h1>الدفع</h1><p>المبلغ: {{ payment.amount }} {{ payment.currency }}</p><p>الحالة: {{ payment.get_status_display }}</p><p class="alert alert-warning">Payment infrastructure implemented. External gateway configuration required.</p></div>{% endblock %}

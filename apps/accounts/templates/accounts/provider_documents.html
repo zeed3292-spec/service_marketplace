@@ -1,0 +1,3 @@
+{% extends 'base.html' %}{% load crispy_forms_tags %}{% block content %}
+<div class="container py-4"><h1>مستندات التوثيق</h1><form method="post" enctype="multipart/form-data" class="card card-body mb-4">{% csrf_token %}{{ form|crispy }}<button class="btn btn-primary">رفع المستند</button></form><div class="table-responsive"><table class="table"><tr><th>النوع</th><th>الحالة</th><th>ملاحظة الإدارة</th><th>تاريخ الرفع</th></tr>{% for doc in documents %}<tr><td>{{ doc.document_type }}</td><td>{{ doc.get_status_display }}</td><td>{{ doc.review_note }}</td><td>{{ doc.created_at }}</td></tr>{% empty %}<tr><td colspan="4">لا توجد مستندات.</td></tr>{% endfor %}</table></div></div>
+{% endblock %}

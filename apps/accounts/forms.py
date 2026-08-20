@@ -6,7 +6,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from .models import User, ProviderProfile
+from .models import User, ProviderProfile, ProviderDocument
 
 
 # تعريف أداة التحقق من رقم الهاتف (أرقام فقط، ومتاح إشارة + اختياريًا)
@@ -185,8 +185,7 @@ class ProviderProfileForm(forms.ModelForm):
     """
     class Meta:
         model = ProviderProfile
-        fields = ['bio', 'profile_image', 'specialization', 'experience_years', 
-                  'hourly_rate', 'address', 'is_available']
+        fields = ['business_name','display_name','bio','phone','email','profile_image','specialization','experience_years','qualifications','experience','hourly_rate','address','city','district','latitude','longitude','service_radius','availability','is_available']
         widgets = {
             'bio': forms.Textarea(attrs={
                 'class': 'form-control',
@@ -224,3 +223,17 @@ class ProviderProfileForm(forms.ModelForm):
             'address': 'العنوان',
             'is_available': 'متاح لطلبات جديدة',
         }
+class ProviderDocumentForm(forms.ModelForm):
+    class Meta:
+        model = ProviderDocument
+        fields = ['document_type','file']
+        widgets = {'document_type': forms.Select(attrs={'class':'form-select'}), 'file': forms.FileInput(attrs={'class':'form-control'})}
+    def clean_file(self):
+        f=self.cleaned_data['file']
+        allowed_ext={'.pdf','.jpg','.jpeg','.png','.doc','.docx'}
+        import os
+        ext=os.path.splitext(f.name.lower())[1]
+        if ext not in allowed_ext: raise ValidationError('نوع الملف غير مسموح.')
+        if f.size > 5*1024*1024: raise ValidationError('حجم الملف يتجاوز 5MB.')
+        if ext in {'.exe','.bat','.sh','.js'}: raise ValidationError('الملفات التنفيذية ممنوعة.')
+        return f

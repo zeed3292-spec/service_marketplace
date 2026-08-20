@@ -18,20 +18,27 @@ class Order(models.Model):
     Orders - Contracts between customers and providers
     """
     
+    STATUS_PENDING='pending'; STATUS_ACCEPTED='accepted'; STATUS_PAYMENT_PENDING='payment_pending'; STATUS_PAID='paid'; STATUS_IN_PROGRESS='in_progress'; STATUS_DELIVERED='delivered'; STATUS_COMPLETED='completed'; STATUS_REJECTED='rejected'; STATUS_CANCELLED='cancelled'; STATUS_DISPUTED='disputed'
     STATUS_CHOICES = [
-        ('pending', 'في انتظار الموافقة'),
-        ('accepted', 'مقبول'),
-        ('in_progress', 'قيد التنفيذ'),
-        ('delivered', 'تم التسليم'),
-        ('completed', 'مكتمل'),
-        ('cancelled', 'ملغي'),
-        ('disputed', 'متنازع عليه'),
+        (STATUS_PENDING, 'في انتظار الموافقة'),
+        (STATUS_ACCEPTED, 'مقبول'),
+        (STATUS_PAYMENT_PENDING, 'بانتظار الدفع'),
+        (STATUS_PAID, 'مدفوع'),
+        (STATUS_IN_PROGRESS, 'قيد التنفيذ'),
+        (STATUS_DELIVERED, 'تم التسليم'),
+        (STATUS_COMPLETED, 'مكتمل'),
+        (STATUS_REJECTED, 'مرفوض'),
+        (STATUS_CANCELLED, 'ملغي'),
+        (STATUS_DISPUTED, 'متنازع عليه'),
     ]
     
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'في الانتظار'),
+        ('processing', 'قيد المعالجة'),
         ('paid', 'مدفوع'),
+        ('failed', 'فشل'),
         ('refunded', 'مسترد'),
+        ('cancelled', 'ملغي'),
     ]
     
     # العلاقات
@@ -104,6 +111,10 @@ class Order(models.Model):
         verbose_name='حالة الطلب'
     )
     
+    currency = models.CharField(max_length=3, default='YER', verbose_name='العملة')
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    provider_net_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     payment_status = models.CharField(
         max_length=20,
         choices=PAYMENT_STATUS_CHOICES,
@@ -147,6 +158,7 @@ class Order(models.Model):
         verbose_name='تاريخ الإلغاء'
     )
     
+    dispute_reason = models.TextField(blank=True, verbose_name='سبب النزاع')
     cancellation_reason = models.TextField(
         blank=True,
         verbose_name='سبب الإلغاء'
@@ -189,29 +201,41 @@ class Order(models.Model):
         """رابط صفحة الطلب"""
         return reverse('orders:order_detail', kwargs={'order_number': self.order_number})
     
+    ALLOWED_TRANSITIONS={STATUS_PENDING:{STATUS_ACCEPTED,STATUS_REJECTED,STATUS_CANCELLED},STATUS_ACCEPTED:{STATUS_PAYMENT_PENDING,STATUS_CANCELLED},STATUS_PAYMENT_PENDING:{STATUS_PAID,STATUS_CANCELLED},STATUS_PAID:{STATUS_IN_PROGRESS,STATUS_DISPUTED},STATUS_IN_PROGRESS:{STATUS_DELIVERED,STATUS_DISPUTED},STATUS_DELIVERED:{STATUS_COMPLETED,STATUS_DISPUTED}}
+    def can_transition_to(self, new_status): return new_status in self.ALLOWED_TRANSITIONS.get(self.status,set())
+    def transition_to(self, new_status, actor=None):
+        from django.core.exceptions import ValidationError
+        if not self.can_transition_to(new_status): raise ValidationError(f'Invalid order transition {self.status} -> {new_status}')
+        self.status=new_status
+        now=timezone.now()
+        if new_status==self.STATUS_ACCEPTED: self.accepted_at=now
+        elif new_status==self.STATUS_IN_PROGRESS: self.started_at=now
+        elif new_status==self.STATUS_DELIVERED: self.delivered_at=now
+        elif new_status==self.STATUS_COMPLETED: self.completed_at=now
+        elif new_status in [self.STATUS_CANCELLED,self.STATUS_REJECTED]: self.cancelled_at=now
     def can_be_cancelled(self):
         """هل يمكن إلغاء الطلب؟"""
-        return self.status in ['pending', 'accepted']
+        return self.status in [self.STATUS_PENDING, self.STATUS_ACCEPTED, self.STATUS_PAYMENT_PENDING]
     
     def can_be_accepted(self):
         """هل يمكن قبول الطلب؟"""
-        return self.status == 'pending'
+        return self.status == self.STATUS_PENDING
     
     def can_be_started(self):
         """هل يمكن بدء العمل؟"""
-        return self.status == 'accepted'
+        return self.status == self.STATUS_PAID
     
     def can_be_delivered(self):
         """هل يمكن التسليم؟"""
-        return self.status == 'in_progress'
+        return self.status == self.STATUS_IN_PROGRESS
     
     def can_be_completed(self):
         """هل يمكن إكمال الطلب؟"""
-        return self.status == 'delivered'
+        return self.status == self.STATUS_DELIVERED
     
     def is_active(self):
         """هل الطلب نشط (غير منتهي)؟"""
-        return self.status not in ['completed', 'cancelled', 'disputed']
+        return self.status not in [self.STATUS_COMPLETED, self.STATUS_CANCELLED, self.STATUS_DISPUTED]
     
     def get_status_badge_class(self):
         """الحصول على class للـ badge حسب الحالة"""
