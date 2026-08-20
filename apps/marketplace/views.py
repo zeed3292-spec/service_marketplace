@@ -6,12 +6,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
-from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
+from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, TemplateView
 from django.urls import reverse_lazy
 from django.db.models import Q, Count
-from .models import Category, Service
+from .models import Category, Service, ProviderService
 from .forms import ServiceForm, ServiceSearchForm
 from apps.accounts.models import User
+from apps.accounts.utils import is_provider_verified
 from apps.orders.models import Order
 
 
@@ -19,21 +20,21 @@ def home_view(request):
     """الصفحة الرئيسية"""
     # إحصائيات
     stats = {
-        'services_count': Service.objects.filter(status='active', provider__provider_profile__status='approved').count(),
-        'providers_count': User.objects.filter(role='provider', provider_profile__status='approved').count(),
+        'services_count': Service.objects.filter(status='active', provider__provider_profile__status='active', provider__provider_profile__verification_status='verified').count(),
+        'providers_count': User.objects.filter(role='provider', provider_profile__status='active', provider_profile__verification_status='verified').count(),
         'orders_count': Order.objects.filter(status='completed').count(),
     }
     
     # أحدث الخدمات (آخر 6)
     latest_services = Service.objects.filter(
         status='active',
-        provider__provider_profile__status='approved'
+        provider__provider_profile__status='active', provider__provider_profile__verification_status='verified'
     ).select_related('provider', 'category').order_by('-created_at')[:6]
     
     # الخدمات الأعلى تقييماً (6 خدمات)
     top_rated_services = Service.objects.filter(
         status='active',
-        provider__provider_profile__status='approved',
+        provider__provider_profile__status='active', provider__provider_profile__verification_status='verified',
         average_rating__gte=4.0
     ).select_related('provider', 'category').order_by('-average_rating', '-created_at')[:6]
     
@@ -66,7 +67,7 @@ class ServiceListView(ListView):
     def get_queryset(self):
         queryset = Service.objects.filter(
             status='active',
-            provider__provider_profile__status='approved'
+            provider__provider_profile__status='active', provider__provider_profile__verification_status='verified'
         ).select_related(
             'provider', 'provider__provider_profile', 'category'
         )
@@ -139,7 +140,7 @@ class ServiceDetailView(DetailView):
             context['related_services'] = Service.objects.filter(
                 category=service.category,
                 status='active',
-                provider__provider_profile__status='approved'
+                provider__provider_profile__status='active', provider__provider_profile__verification_status='verified'
             ).exclude(id=service.id).select_related('provider')[:4]
         
         return context
@@ -157,11 +158,15 @@ class ServiceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     
     def test_func(self):
         """فقط المقدمين يمكنهم إضافة خدمات"""
-        return self.request.user.is_provider()
+        return self.request.user.is_provider() and is_provider_verified(self.request.user)
+    
+    def handle_no_permission(self):
+        messages.error(self.request, 'يجب تفعيل/توثيق حساب مقدم الخدمة قبل إضافة الخدمات.')
+        return redirect('accounts:provider_profile_edit')
     
     def form_valid(self, form):
         form.instance.provider = self.request.user
-        messages.success(self.request, 'تم إضافة الخدمة يرجى الانتظار حتى يتم قبولها من الادمن')
+        messages.success(self.request, 'تم إضافة الخدمة بنجاح.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
@@ -281,10 +286,51 @@ class CategoryDetailView(DetailView):
         services = Service.objects.filter(
             category=category,
             status='active',
-            provider__provider_profile__status='approved'
+            provider__provider_profile__status='active', provider__provider_profile__verification_status='verified'
         ).select_related('provider', 'provider__provider_profile')
         
         context['services'] = services
         context['services_count'] = services.count()
         
+        return context
+
+class ProviderSearchView(ListView):
+    template_name = 'marketplace/provider_search.html'
+    context_object_name = 'providers'
+    paginate_by = 12
+    def get_queryset(self):
+        from .search import filter_public_providers
+        return filter_public_providers(self.request.GET)
+    def get_context_data(self, **kwargs):
+        context=super().get_context_data(**kwargs)
+        context['categories']=Category.objects.filter(is_active=True)
+        context['services']=Service.objects.filter(status='active')
+        context['params']=self.request.GET
+        return context
+
+class GlobalSearchView(TemplateView):
+    template_name='marketplace/global_search.html'
+    def get_context_data(self, **kwargs):
+        from django.core.paginator import Paginator
+        from .search import filter_public_services, filter_public_categories, filter_public_providers
+        context=super().get_context_data(**kwargs)
+        q=self.request.GET.get('q','').strip()
+        context['q']=q
+        context['services']=filter_public_services(self.request.GET)[:10]
+        context['categories']=filter_public_categories(self.request.GET)[:10]
+        context['providers']=filter_public_providers(self.request.GET)
+        if not isinstance(context['providers'], list): context['providers']=context['providers'][:10]
+        if self.request.user.is_authenticated and (self.request.user.is_staff or self.request.user.is_superuser):
+            from apps.orders.models import Order
+            from apps.payments.models import Payment
+            from apps.reviews.models import Review
+            from apps.core.models import Notification
+            from apps.accounts.models import ProviderDocument
+            if q:
+                context['admin_users']=User.objects.filter(Q(username__icontains=q)|Q(email__icontains=q)|Q(phone__icontains=q))[:10]
+                context['admin_orders']=Order.objects.filter(Q(order_number__icontains=q)|Q(customer__username__icontains=q)|Q(provider__username__icontains=q)|Q(service__title__icontains=q)).select_related('customer','provider','service')[:10]
+                context['admin_payments']=Payment.objects.filter(Q(transaction_id__icontains=q)|Q(order__order_number__icontains=q)|Q(order__customer__username__icontains=q)|Q(order__provider__username__icontains=q)).select_related('order')[:10]
+                context['admin_reviews']=Review.objects.filter(Q(customer__username__icontains=q)|Q(provider__username__icontains=q)|Q(service__title__icontains=q)|Q(order__order_number__icontains=q)).select_related('customer','provider','service','order')[:10]
+                context['admin_documents']=ProviderDocument.objects.filter(Q(provider__user__username__icontains=q)|Q(document_type__name__icontains=q)).select_related('provider__user','document_type')[:10]
+                context['admin_notifications']=Notification.objects.filter(Q(title__icontains=q)|Q(message__icontains=q)|Q(recipient__username__icontains=q))[:10]
         return context

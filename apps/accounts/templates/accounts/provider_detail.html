@@ -28,7 +28,7 @@
                 </p>
                 <p class="mb-3">
                     <i class="bi bi-geo-alt ms-2"></i>
-                    {{ provider.city|default:"المملكة العربية السعودية" }}
+                    {{ provider_profile.city|default:provider.city|default:"غير محدد" }}{% if provider_profile.district %} - {{ provider_profile.district }}{% endif %}
                 </p>
 
                 <!-- التقييم -->
@@ -53,6 +53,9 @@
                 </div>
 
                 <!-- الحالة -->
+                {% if provider_profile.verification_status == 'verified' %}
+                <span class="badge bg-info me-2"><i class="bi bi-patch-check ms-1"></i>مقدم خدمة موثّق</span>
+                {% endif %}
                 {% if provider_profile.is_available %}
                 <span class="badge bg-success">
                     <i class="bi bi-check-circle ms-1"></i>
@@ -89,14 +92,12 @@
                 </div>
             </div>
 
-            <!-- الخدمات المقدمة (سيتم إضافتها في المرحلة 3) -->
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-body">
-                    <h5 class="fw-bold mb-3">
-                        <i class="bi bi-grid-3x3-gap ms-2"></i>
-                        الخدمات المقدمة
-                    </h5>
-                    <p class="text-muted fst-italic">ستظهر الخدمات هنا في المرحلة القادمة.</p>
+                    <h5 class="fw-bold mb-3"><i class="bi bi-grid-3x3-gap ms-2"></i>الخدمات المقدمة</h5>
+                    {% for service in provider_services %}
+                    <div class="border rounded p-3 mb-2"><strong>{{ service.title }}</strong><p class="text-muted mb-0">{{ service.description|truncatewords:20 }}</p></div>
+                    {% empty %}<p class="text-muted fst-italic">لا توجد خدمات منشورة حالياً.</p>{% endfor %}
                 </div>
             </div>
 
@@ -151,6 +152,16 @@
                 </div>
             </div>
 
+            {% if provider_profile.latitude and provider_profile.longitude %}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-2">موقع مقدم الخدمة</h6>
+                    <p class="text-muted small mb-2">{{ provider_profile.city }}{% if provider_profile.district %} - {{ provider_profile.district }}{% endif %}</p>
+                    <div id="public-provider-map" style="height: 280px; border-radius: 12px; border: 1px solid #ddd;" data-lat="{{ provider_profile.latitude }}" data-lng="{{ provider_profile.longitude }}"></div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- معلومات السعر -->
             {% if provider_profile.hourly_rate %}
             <div class="card shadow-sm border-0 mb-4">
@@ -192,4 +203,19 @@
         </div>
     </div>
 </div>
+{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQd+MxzeIWr4cYhDTmPHuAHpKf0U0oA=" crossorigin="" />
+{% endblock %}
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function(){
+ const el=document.getElementById('public-provider-map'); if(!el) return;
+ const lat=parseFloat(el.dataset.lat), lng=parseFloat(el.dataset.lng);
+ const map=L.map(el).setView([lat,lng],13);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+ L.marker([lat,lng]).addTo(map);
+})();
+</script>
 {% endblock %}

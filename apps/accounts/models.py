@@ -5,6 +5,7 @@ User and Profile models for the accounts app
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import AbstractUser
+from .storage import PrivateMediaStorage
 
 
 class User(AbstractUser):
@@ -160,7 +161,7 @@ class ProviderDocument(models.Model):
     STATUS_CHOICES=[('pending','قيد المراجعة'),('approved','مقبول'),('rejected','مرفوض'),('needs_additional_documents','يحتاج مستندات إضافية')]
     provider = models.ForeignKey(ProviderProfile, on_delete=models.CASCADE, related_name='documents')
     document_type = models.ForeignKey(ProviderDocumentType, on_delete=models.PROTECT, related_name='documents')
-    file = models.FileField(upload_to=provider_document_path)
+    file = models.FileField(upload_to=provider_document_path, storage=PrivateMediaStorage())
     status = models.CharField(max_length=40, choices=STATUS_CHOICES, default='pending', db_index=True)
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_provider_documents')
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -171,4 +172,6 @@ class ProviderDocument(models.Model):
         verbose_name='مستند مقدم خدمة'; verbose_name_plural='مستندات مقدمي الخدمات'
         permissions=[('review_provider_document','Can review provider document'),('verify_provider','Can verify provider')]
         indexes=[models.Index(fields=['provider','status']), models.Index(fields=['document_type','status'])]
+    def can_be_viewed_by(self, user):
+        return user.is_authenticated and (user == self.provider.user or user.has_perm('accounts.review_provider_document') or user.is_superuser)
     def __str__(self): return f'{self.provider} - {self.document_type}'

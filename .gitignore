@@ -59,3 +59,6 @@ dist/
 Tracking Human Intellgance System Thesis.pdf
 extract_chapter3.py
 extract_pdf.py
+
+# Private uploaded documents
+/private_media/
