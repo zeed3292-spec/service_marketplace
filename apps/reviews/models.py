@@ -97,6 +97,16 @@ class Review(models.Model):
     def __str__(self):
         return f"تقييم {self.customer.username} - {self.service.title}"
     
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.order_id:
+            if self.order.status != self.order.STATUS_COMPLETED:
+                raise ValidationError('لا يمكن التقييم إلا بعد إكمال الطلب.')
+            if self.customer_id and self.customer_id != self.order.customer_id:
+                raise ValidationError('التقييم مسموح فقط لصاحب الطلب.')
+            if self.provider_id and self.provider_id != self.order.provider_id:
+                raise ValidationError('مقدم الخدمة يجب أن يطابق الطلب.')
+
     def get_average_rating(self):
         """حساب متوسط التقييمين"""
         return (self.service_rating + self.provider_rating) / 2

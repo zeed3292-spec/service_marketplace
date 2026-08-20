@@ -21,6 +21,7 @@ urlpatterns = [
     path('orders/', include('apps.orders.urls')),
     path('reviews/', include('apps.reviews.urls')),
     path('chat/', include('apps.chat.urls')),
+    path('payments/', include('apps.payments.urls')),
 ]
 
 # إضافة روابط الوسائط في وضع التطوير

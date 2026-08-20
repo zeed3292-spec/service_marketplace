@@ -11,6 +11,7 @@ from django.views.generic import ListView, DetailView
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.db.models import Q
+from django.db import transaction
 from .models import Order, Delivery, Milestone, OrderMessage
 from .forms import OrderCreateForm, DeliveryForm, MilestoneForm, OrderMessageForm, CancellationForm
 from apps.marketplace.models import Service
@@ -191,10 +192,11 @@ def order_accept(request, order_number):
         return redirect('orders:order_detail', order_number=order_number)
     
     # قبول الطلب
-    order.status = 'accepted'
-    order.accepted_at = timezone.now()
-    order.payment_status = 'paid'  # افتراضياً (يمكن تعديله لاحقاً)
-    order.save()
+    with transaction.atomic():
+        order.transition_to(Order.STATUS_ACCEPTED, actor=request.user)
+        order.save()
+        order.transition_to(Order.STATUS_PAYMENT_PENDING, actor=request.user)
+        order.save()
     
     messages.success(request, 'تم قبول الطلب بنجاح!')
     return redirect('orders:order_detail', order_number=order_number)
@@ -216,7 +218,7 @@ def order_reject(request, order_number):
     if request.method == 'POST':
         form = CancellationForm(request.POST)
         if form.is_valid():
-            order.status = 'cancelled'
+            order.status = Order.STATUS_REJECTED
             order.cancelled_at = timezone.now()
             order.cancellation_reason = form.cleaned_data['reason']
             order.save()
@@ -240,8 +242,7 @@ def order_start(request, order_number):
         messages.error(request, 'لا يمكن بدء العمل على هذا الطلب.')
         return redirect('orders:order_detail', order_number=order_number)
     
-    order.status = 'in_progress'
-    order.started_at = timezone.now()
+    order.transition_to(Order.STATUS_IN_PROGRESS, actor=request.user)
     order.save()
     
     messages.success(request, 'تم بدء العمل على الطلب!')
@@ -269,8 +270,7 @@ def order_deliver(request, order_number):
             delivery.save()
             
             # تحديث حالة الطلب
-            order.status = 'delivered'
-            order.delivered_at = timezone.now()
+            order.transition_to(Order.STATUS_DELIVERED, actor=request.user)
             order.save()
             
             messages.success(request, 'تم تسليم العمل بنجاح! في انتظار مراجعة العميل.')
@@ -292,8 +292,7 @@ def order_complete(request, order_number):
         messages.error(request, 'لا يمكن إكمال هذا الطلب.')
         return redirect('orders:order_detail', order_number=order_number)
     
-    order.status = 'completed'
-    order.completed_at = timezone.now()
+    order.transition_to(Order.STATUS_COMPLETED, actor=request.user)
     order.save()
     
     messages.success(request, 'تم إكمال الطلب بنجاح! شكراً لاستخدامك منصتنا.')
@@ -317,10 +316,10 @@ def order_cancel(request, order_number):
     if request.method == 'POST':
         form = CancellationForm(request.POST)
         if form.is_valid():
-            order.status = 'cancelled'
+            order.status = Order.STATUS_CANCELLED
             order.cancelled_at = timezone.now()
             order.cancellation_reason = form.cleaned_data['reason']
-            order.payment_status = 'refunded'
+            order.payment_status = 'refunded' if order.payment_status == 'paid' else 'cancelled'
             order.save()
             
             messages.success(request, 'تم إلغاء الطلب.')
